@@ -1,0 +1,11 @@
+{
+    "display_name": "Crypto Bileto",
+    "version": "0.01",
+    "description": "Create and manage printable donation cards",
+    "project_url": "",
+    "minimum_ec_version": "4.0.8",
+    "package_name": "crypto-bileto",
+    "available_for": [
+        "qt"
+    ]
+}
