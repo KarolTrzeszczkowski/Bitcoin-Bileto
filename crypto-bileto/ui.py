@@ -11,7 +11,9 @@ from electroncash.transaction import Transaction, TYPE_ADDRESS
 from electroncash.util import PrintError, print_error, age, Weak, InvalidPassword, NotEnoughFunds
 import random,  tempfile, string, os, queue
 from electroncash.bitcoin import encrypt_message, deserialize_privkey, public_key_from_private_key
+from .create_dialog import save_private_keys
 from enum import IntEnum
+import threading
 
 
 def get_name(utxo) -> str:
@@ -45,6 +47,23 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         self.loaded_icon= self._get_loaded_icon()
         self.collected_icon = self._get_collected_icon()
         self.wallet = tab.wallet
+        self.balances = dict()
+        self.synch_event = threading.Event()
+        lock = threading.Lock()
+        self.synch = threading.Thread(target=self.synchronize, daemon=False, args=(self.synch_event,lock,))
+        self.synch.start()
+
+    def synchronize(self,e, lock):
+        tab = self.tab()
+        while True:
+            e.wait()
+            with lock:
+                items = tab.addresses.items()
+            for i, addrs in items:
+                for a in addrs:
+                    self.balances[a] = self.address_balance(a)
+                    self.update_sig.emit()
+
 
 
     def get_selected(self):
@@ -58,6 +77,8 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
             privkeys = [s.data(2, Qt.UserRole) for s in selected]
         elif isinstance(selected[0].data(2, Qt.UserRole),list):
             privkeys = selected[0].data(2, Qt.UserRole)
+        else:
+            privkeys = []
         tab = self.tab()
         target = tab.wallet.get_unused_address()
         label = selected[0].data(0,Qt.UserRole)
@@ -75,7 +96,36 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         f = lambda: tab.plugin.open_fund_dialog(tab.wallet_name, tab)
         menu.addAction(_("Fund"), f)
         menu.addAction(_("Sweep"), lambda:self.do_sweep(selected))
+        menu.addAction(_("Export selected ("+str(len(selected))+")"), lambda:self.export(selected))
         menu.exec_(self.viewport().mapToGlobal(position))
+        pass
+
+
+    def export(self, selected):
+        if isinstance(selected[0].data(2, Qt.UserRole), str):
+            new_batch = [s.data(2, Qt.UserRole) for s in selected]
+        elif isinstance(selected[0].data(2, Qt.UserRole),list):
+            new_batch = selected[0].data(2, Qt.UserRole)
+        else:
+            new_batch = []
+        tab = self.tab()
+        label = selected[0].data(0,Qt.UserRole)
+        path = tab.file_paths[label]
+        old_batch = tab.batches[label]
+        differ = [p for p in old_batch if p not in new_batch]
+        differ.insert(0,label + 'remaining')
+        new_batch.insert(0, label + 'exported')
+        differ = '\n'.join(differ)
+        new_batch = '\n'.join(new_batch)
+        pk = self.wallet.get_pubkey(False,0)
+        filename = os.path.join(os.path.dirname(path), label + 'exported' + '_encrypted_private_keys')
+        print("filename", filename)
+        save_private_keys(new_batch, pk, filename)
+        tab.load(filename)
+        filename = os.path.join(os.path.dirname(path),  label + 'remaining' + '_encrypted_private_keys')
+        print("filename", filename)
+        save_private_keys(differ, pk, filename)
+        tab.load(filename)
         pass
 
     @staticmethod
@@ -99,11 +149,28 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
     def address_balance(self, a):
         msg =('blockchain.scripthash.get_balance', [a.to_scripthash_hex()])
         ans = self.main_window.network.synchronous_get(msg)
-        sum = ans["confirmed"]+ans["unconfirmed"]
-        return sum
+        s = ans["confirmed"]+ans["unconfirmed"]
+        return s
 
 
     def on_update(self):
+        root = self.invisibleRootItem()
+        def remember_expanded(root):
+            expanded = set()
+            for j in range(0,root.childCount()):
+                it = root.child(j)
+                if it.isExpanded():
+                    expanded.add(it.data(0,Qt.UserRole))
+            print("expanded: ",expanded)
+            return expanded
+        def restore_expanded(root, expanded_item_labels):
+            for j in range(0, root.childCount()):
+                it = root.child(j)
+                if it.data(0,Qt.UserRole) in expanded_item_labels:
+                    it.setExpanded(True)
+                    print("restored")
+
+        expanded_item_labels = remember_expanded(root)
         self.clear()
         tab = self.tab()
         batches = tab.batches
@@ -111,20 +178,26 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         if not tab :
             return
         for label, batch_addr in addresses.items():
-            item = QTreeWidgetItem([label, None])
+            item = QTreeWidgetItem([label, ''])
             item.setFont(0, self.monospace_font)
             item.setTextAlignment(0, Qt.AlignLeft)
             item.setData(0,Qt.UserRole,label)
             item.setData(1, Qt.UserRole, batch_addr)
             item.setData(2,Qt.UserRole,batches[label])
             self.addChild(item)
+            print(item.isExpanded())
             for i, a in enumerate(batch_addr):
-                b = self.address_balance(a)
-                addr_item = SortableTreeWidgetItem([a.to_ui_string(),str(b)])
+                try:
+                    b = self.main_window.format_amount(self.balances[a])
+                except KeyError:
+                    b = "Synchronizing..."
+                addr_item = QTreeWidgetItem([a.to_ui_string(),str(b)])
                 addr_item.setData(0,Qt.UserRole,label)
                 addr_item.setData(1,Qt.UserRole, a)
                 addr_item.setData(2,Qt.UserRole,batches[label][i])
                 item.addChild(addr_item)
+        restore_expanded(root,expanded_item_labels)
+
 
 class BiletojTab(MessageBoxMixin, PrintError, QWidget):
 
@@ -138,10 +211,11 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
         self.wallet = parent.wallet
         self.wallet_name = wallet_name
         self.plugin = plugin
+
         self.batches = dict()
         self.addresses = dict()
+        self.file_paths = dict()
         self.main_window = parent
-        cancel = False
         self.tu = BiletojList(parent, self)
         vbox = QVBoxLayout()
         self.setLayout(vbox)
@@ -156,7 +230,7 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
         hbox.addWidget(self.abort_but)
         hbox.addWidget(self.new_but)
         self.set_label_signal.connect(self.set_label_slot)
-        self.sleeper = queue.Queue()
+
 
 
     def get_password(self):
@@ -170,15 +244,18 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
                 self.show_error("Wrong password.")
                 return
 
-    def load(self):
-        fileName = self.main_window.getOpenFileName("Load Biletoj", "*")
+    def load(self, file_name = False):
+        if not file_name:
+            file_name = self.main_window.getOpenFileName("Load Biletoj", "*")
         try:
-            with open(fileName, "r") as f:
+            with open(file_name, "r") as f:
                 file_content = f.read()
                 batch = self.decrypt(file_content)
                 self.batches[batch[0]] = batch[1:] #the first element is batch label
                 self.addresses[batch[0]] = self.generate_addresses(batch[1:])
-            self.tu.update()
+                self.file_paths[batch[0]] = file_name
+            self.tu.synch_event.set()
+            self.tu.synch_event.clear()
         except Exception as ex:
             print(ex)
             return
@@ -194,7 +271,8 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
                 pass
             else:
                 return decrypted.strip().split('\n')
-    
+
+
     def generate_addresses(self, batch):
         addresses = []
         for k in batch:
@@ -209,13 +287,9 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
         ''' This is here because searchable_list must define a filter method '''
 
     def diagnostic_name(self):
-        return "InterWalletTransfer.Transfer"
+        return "BiletojTab.Transfer"
 
 
-
-    def switch_signal_slot(self):
-        ''' Runs in GUI (main) thread '''
-        self.plugin.switch_to(NewBatchTab, self.wallet_name, None, None, None)
 
     def done_slot(self, msg):
         self.abort_but.setText(_("Back"))
@@ -231,7 +305,7 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
         self.switch_signal.emit()
 
     def kill_join(self):
-        pass 
+        pass
 
     def on_delete(self):
         pass

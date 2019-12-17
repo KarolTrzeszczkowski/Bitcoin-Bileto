@@ -1,13 +1,19 @@
 from PyQt5 import QtGui
 from PyQt5 import QtCore
+from PyQt5.QtWidgets import *
+from electroncash_gui.qt.util import *
+
+
 import weakref
 
 
-import electroncash.version, os
+import electroncash.version, os, threading
 from electroncash.i18n import _
 from electroncash.plugins import BasePlugin, hook
-from electroncash_gui.qt.util import destroyed_print_error
-from electroncash.util import finalization_print_error
+from electroncash.util import finalization_print_error, PrintError
+from electroncash_gui.qt.main_window import ElectrumWindow
+
+
 
 
 class Plugin(BasePlugin):
@@ -22,6 +28,7 @@ class Plugin(BasePlugin):
         self.lw_tabs = {}
         self.lw_tab = {}
         self.create_dialogs = {}
+        self.settings_dialogs = {}
         self.fund_dialogs = {}
         self.weak_dialogs = weakref.WeakSet()
 
@@ -50,6 +57,7 @@ class Plugin(BasePlugin):
     @hook
     def delete_contacts(self, contact_entries):
         self.print_error("delete_contacts", contact_entries)
+
 
     @hook
     def init_qt(self, qt_gui):
@@ -84,6 +92,8 @@ class Plugin(BasePlugin):
         del self.wallet_windows[wallet_name]
         self.remove_ui_for_wallet(wallet_name, window)
 
+    def has_settings_dialog(self):
+        return True
 
     @staticmethod
     def _get_icon() -> QtGui.QIcon:
@@ -104,7 +114,6 @@ class Plugin(BasePlugin):
         window.tabs.addTab(tab, self._get_icon(), _('Crypto Bileto'))
 
     def remove_ui_for_wallet(self, wallet_name, window):
-
         wallet_tab = self.lw_tabs.get(wallet_name)
         widget = self.lw_tab.get(wallet_name)
         if wallet_tab is not None:
@@ -151,34 +160,79 @@ class Plugin(BasePlugin):
             self.print_error(repr(e))
             return
 
+    def settings_dialog(self, window, settings_signal=None):
+        def window_parent(w):
+            # this is needed because WindowModalDialog overrides window.parent
+            if callable(w.parent): return w.parent()
+            return w.parent
+        while not isinstance(window, ElectrumWindow) and window and window_parent(window):
+            # MacOS fixups -- we can get into a situation where we are created without the ElectrumWindow being an immediate parent or grandparent
+            window = window_parent(window)
+        assert window and isinstance(window, ElectrumWindow)
+
+        wallet_name = window.wallet.basename()
+        d = self._open_dialog(wallet_name, SettingsDialog, self.settings_dialogs)
+        d.settings_updated_signal = settings_signal
+
     def open_create_dialog(self, wallet_name, entry=None):
-        dialog = self.create_dialogs.get(wallet_name, None)
-        if dialog is None:
-            window = self.wallet_windows[wallet_name]
-            from .create_dialog import NewBatchDialog
-            dialog = NewBatchDialog(window, self, wallet_name, None)
-            self.weak_dialogs.add(dialog)
-            self.create_dialogs[wallet_name] = dialog
-            dialog.show()
-        else:
-            dialog.raise_()
-            dialog.activateWindow()
-            dialog.show()
+        from .create_dialog import NewBatchDialog
+        self._open_dialog(wallet_name, NewBatchDialog, self.create_dialogs)
+        return
 
     def on_fund_dialog_closed(self, wallet_name):
         if wallet_name in self.fund_dialogs:
             del self.fund_dialogs[wallet_name]
 
+
+    def on_create_dialog_closed(self, wallet_name):
+        if wallet_name in self.fund_dialogs:
+            del self.fund_dialogs[wallet_name]
+
     def open_fund_dialog(self, wallet_name, tab):
-        dialog = self.fund_dialogs.get(wallet_name, None)
+        from .fund_dialog import FundDialog
+        self._open_dialog(wallet_name,FundDialog, self.fund_dialogs)
+        return
+
+    def _open_dialog(self, wallet_name, dialog_class, dialog_container):
+        dialog = dialog_container.get(wallet_name, None)
         if dialog is None:
             window = self.wallet_windows[wallet_name]
-            from .fund_dialog import FundDialog
-            dialog = FundDialog(window, self, wallet_name, None, tab)
+            dialog = dialog_class(window, self, wallet_name, None)
             self.weak_dialogs.add(dialog)
-            self.fund_dialogs[wallet_name] = dialog
+            dialog_container[wallet_name] = dialog
             dialog.show()
+            return dialog
         else:
             dialog.raise_()
             dialog.activateWindow()
             dialog.show()
+            return dialog
+
+class SettingsDialog(QWidget,MessageBoxMixin):
+    def __init__(self, parent, plugin, wallet_name, password=None):
+        QWidget.__init__(self)
+        self.settings_updated_signal=None
+        self.setWindowTitle("Crypto Bileto settings")
+        self.wallet = parent.wallet
+        self.set_dir = QPushButton("Change directory")
+        self.set_dir.clicked.connect(self.get_dir)
+        self.working_directory = self.wallet.storage.get("bileto_path")
+        self.label = QLabel(self.working_directory)
+        vbox= QVBoxLayout(self)
+        vbox.addWidget(QLabel("Working Directory:"))
+        vbox.addWidget(self.label)
+        vbox.addWidget(self.set_dir)
+
+    def get_dir(self):
+        dirname = QFileDialog.getExistingDirectory(self, "Bileto working dir", self.working_directory)
+        try:
+            assert(os.path.isdir(dirname))
+        except:
+            pass
+        else:
+            self.working_directory = dirname
+            self.label.setText(dirname)
+            self.wallet.storage.put("bileto_path", dirname)
+            if self.settings_updated_signal:
+                self.settings_updated_signal.emit()
+            print(dirname)
