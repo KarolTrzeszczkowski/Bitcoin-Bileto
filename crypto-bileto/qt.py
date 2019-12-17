@@ -114,6 +114,7 @@ class Plugin(BasePlugin):
         window.tabs.addTab(tab, self._get_icon(), _('Crypto Bileto'))
 
     def remove_ui_for_wallet(self, wallet_name, window):
+        self.print_error("starting removing UI")
         wallet_tab = self.lw_tabs.get(wallet_name)
         widget = self.lw_tab.get(wallet_name)
         if wallet_tab is not None:
@@ -179,14 +180,6 @@ class Plugin(BasePlugin):
         self._open_dialog(wallet_name, NewBatchDialog, self.create_dialogs)
         return
 
-    def on_fund_dialog_closed(self, wallet_name):
-        if wallet_name in self.fund_dialogs:
-            del self.fund_dialogs[wallet_name]
-
-
-    def on_create_dialog_closed(self, wallet_name):
-        if wallet_name in self.fund_dialogs:
-            del self.fund_dialogs[wallet_name]
 
     def open_fund_dialog(self, wallet_name, tab):
         from .fund_dialog import FundDialog

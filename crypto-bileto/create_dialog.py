@@ -20,7 +20,7 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
     settings_updated_signal = pyqtSignal()
 
     def __init__(self, parent, plugin, wallet_name, password=None):
-        QDialog.__init__(self, parent,Qt.Dialog)
+        QDialog.__init__(self, parent)
         self.main_window = parent
         self.password = password
         self.wallet = parent.wallet

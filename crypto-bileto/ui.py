@@ -50,7 +50,7 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         self.balances = dict()
         self.synch_event = threading.Event()
         lock = threading.Lock()
-        self.synch = threading.Thread(target=self.synchronize, daemon=False, args=(self.synch_event,lock,))
+        self.synch = threading.Thread(target=self.synchronize, daemon=True, args=(self.synch_event,lock,))
         self.synch.start()
 
     def synchronize(self,e, lock):
@@ -230,8 +230,6 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
         hbox.addWidget(self.abort_but)
         hbox.addWidget(self.new_but)
         self.set_label_signal.connect(self.set_label_slot)
-
-
 
     def get_password(self):
         if self.wallet.has_password():
