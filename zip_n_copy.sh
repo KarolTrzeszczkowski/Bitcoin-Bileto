@@ -1,7 +1,7 @@
 #!/bin/bash
 
-plugname=crypto-bileto
-dirname=crypto-bileto
+plugname=bitcoin-bileto
+dirname=bitcoin-bileto
 
 echome=$HOME/.electron-cash
 dest=$echome/external_plugins/${plugname}.zip

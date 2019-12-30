@@ -1,10 +1,10 @@
 {
-    "display_name": "Crypto Bileto",
+    "display_name": "Bitcoin Bileto",
     "version": "0.7",
     "description": "Create and manage printable donation cards",
     "project_url": "",
     "minimum_ec_version": "4.0.8",
-    "package_name": "crypto-bileto",
+    "package_name": "bitcoin-bileto",
     "available_for": [
         "qt"
     ]
