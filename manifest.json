@@ -1,6 +1,6 @@
 {
     "display_name": "Bitcoin Bileto",
-    "version": "0.7",
+    "version": "0.0.10",
     "description": "Create and manage printable donation cards",
     "project_url": "",
     "minimum_ec_version": "4.0.8",

@@ -30,7 +30,7 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         self.batch_label = "BitcoinBiletoj1"
         self.template_file = ''
         self.working_directory = self.wallet.storage.get("bileto_path")
-        if not self.working_directory:
+        if self.working_directory:
             if not os.path.exists(self.working_directory) :
                 self.working_directory = None
         self.number = 0

@@ -72,14 +72,12 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         else:
             self.b.setDisabled(False)
 
-    def closeEvent(self, QCloseEvent):
-        tab=self.tab()
-        tab.plugin.on_fund_dialog_closed(self.wallet_name)
 
     def do_fund(self):
         print("funding")
         selected = self.selected
         if not selected:
+            print("nothing was selected")
             return
         if isinstance(selected[0].data(1, Qt.UserRole), Address):
             addresses = [s.data(1, Qt.UserRole) for s in selected]
@@ -131,3 +129,7 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         if min(self.values) <= 1100:
             return None
         return outputs
+
+    def closeEvent(self, QCloseEvent):
+        tab=self.tab()
+        tab.plugin.on_fund_dialog_closed(self.wallet_name)

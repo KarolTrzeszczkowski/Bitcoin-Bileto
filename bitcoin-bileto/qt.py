@@ -182,9 +182,25 @@ class Plugin(BasePlugin):
 
 
     def open_fund_dialog(self, wallet_name, tab):
+        print("opening fund dialog")
         from .fund_dialog import FundDialog
-        self._open_dialog(wallet_name,FundDialog, self.fund_dialogs)
-        return
+        dialog = self.fund_dialogs.get(wallet_name, None)
+        if dialog is None:
+            window = self.wallet_windows[wallet_name]
+            dialog = FundDialog(window, self, wallet_name, None, tab)
+            self.weak_dialogs.add(dialog)
+            self.fund_dialogs[wallet_name] = dialog
+            dialog.show()
+            return dialog
+        else:
+            dialog.raise_()
+            dialog.activateWindow()
+            dialog.show()
+            return dialog
+
+    def on_fund_dialog_closed(self, wallet_name):
+        if wallet_name in self.fund_dialogs:
+            del self.fund_dialogs[wallet_name]
 
     def _open_dialog(self, wallet_name, dialog_class, dialog_container):
         dialog = dialog_container.get(wallet_name, None)
@@ -210,9 +226,10 @@ class SettingsDialog(QWidget,MessageBoxMixin):
         self.set_dir = QPushButton("Change directory")
         self.set_dir.clicked.connect(self.get_dir)
         self.working_directory = self.wallet.storage.get("bileto_path")
-        if not os.path.exists(self.working_directory):
-            self.wallet.storage.put("bileto_path", None)
-            self.working_directory = None
+        if self.working_directory:
+            if not os.path.exists(self.working_directory):
+                self.wallet.storage.put("bileto_path", None)
+                self.working_directory = None
         self.label = QLabel(self.working_directory)
         vbox= QVBoxLayout(self)
         vbox.addWidget(QLabel("Working Directory:"))
