@@ -10,6 +10,7 @@ from electroncash.transaction import Transaction, TYPE_ADDRESS
 from electroncash_gui.qt.transaction_dialog import show_transaction
 from electroncash_gui.qt.amountedit  import BTCAmountEdit
 from math import floor, ceil
+import statistics
 
 
 
@@ -54,6 +55,10 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         grid.addWidget(QLabel("Standard deviation: "),1 ,0)
         grid.addWidget(QLabel("Max: "), 2, 0)
         grid.addWidget(QLabel("Min: "),3,0)
+        grid.addWidget(QLabel("Sum: "), 4, 0)
+        self.stats = [QLabel('') for r in range(5)]
+        print(self.stats)
+        for i, lab in enumerate(self.stats): grid.addWidget(lab,i,1)
         tab = self.tab()
         self.selected = tab.tu.selectedItems()
         self.b = QPushButton(_("Fund"))
@@ -65,6 +70,8 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
     def fund_parameters_changed(self):
         try:
             self.total_amount = self.total_amount_wid.get_amount()
+            self.make_outputs()
+            self.update_stats()
         except Exception as e:
             print(e)
             self.b.setDisabled(True)
@@ -72,9 +79,17 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         else:
             self.b.setDisabled(False)
 
+    def update_stats(self):
+        stats = [0]*5
+        stats[0] = statistics.mean(self.values)
+        stats[1] = statistics.stdev(self.values)
+        stats[2] = max(self.values)
+        stats[3] = min(self.values)
+        stats[4] = sum(self.values)
+        for s in stats: print(str(s))
+        for i,s in enumerate(stats): self.stats[i].setText(str(self.main_window.format_amount(s)))
 
-    def do_fund(self):
-        print("funding")
+    def make_outputs(self):
         selected = self.selected
         if not selected:
             print("nothing was selected")
@@ -87,6 +102,12 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
             outputs = self.regular(addresses)
         else:
             outputs = self.tf(addresses)
+
+        return outputs
+
+    def do_fund(self):
+        print("funding")
+        outputs = self.make_outputs()
         if not outputs:
             self.show_error("Minimum value too low to sweep with bitcoin.com")
             return
@@ -104,9 +125,13 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
 
     def regular(self, addresses):
         outputs = []
+        self.values = []
         am = self.total_amount // len(addresses)
         for a in addresses:
             outputs.append((TYPE_ADDRESS,a,am))
+            self.values.append(am)
+        if min(self.values) <= 1100:
+            return None
         return outputs
 
 

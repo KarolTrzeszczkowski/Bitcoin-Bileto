@@ -2,7 +2,6 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from subprocess import call, check_output
-from electroncash_gui.qt.qrcodewidget import QRCodeWidget
 from electroncash import keystore
 from electroncash.wallet import Standard_Wallet, sweep
 from electroncash.storage import WalletStorage
@@ -10,7 +9,7 @@ from electroncash.i18n import _
 
 from electroncash_gui.qt.util import *
 from electroncash.util import PrintError, print_error, age, Weak, InvalidPassword
-import random, tempfile, string, os, threading, queue
+import random, tempfile, string, os, threading, queue, qrcode
 from electroncash.bitcoin import encrypt_message, deserialize_privkey, public_key_from_private_key
 
 
@@ -100,6 +99,8 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         self.number_wid.setMaximumWidth(140)
         self.only_qrcodes_checkbox = QCheckBox("Only make QR codes.")
         self.only_qrcodes_checkbox.stateChanged.connect(self.batch_info_changed)
+        self.encrypt_checkbox = QCheckBox("Encrypt Batch.")
+        vbox.addWidget(self.encrypt_checkbox)
         vbox.addWidget(self.only_qrcodes_checkbox)
         b = QPushButton(_("Load .tex template"))
         b.clicked.connect(self.load_template)
@@ -198,7 +199,7 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         filename = os.path.join(self.working_directory,
                                 self.batch_label + '_encrypted_private_keys')
 
-        save_private_keys(batch_privs,self.public_key,filename)
+        save_private_keys(batch_privs,self.public_key,filename, self.encrypt_checkbox.isChecked())
         self.prog_bar.setVisible(False)
         self.main_window.show_message("Done!")
         self.b.setDisabled(False)
@@ -221,7 +222,98 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         #self.plugin.on_create_dialog_closed(self.wallet_name)
         event.accept()
 
-def save_private_keys(batch_privs, public_key, filename):
-    encrypted_privs = encrypt_message(batch_privs.encode('utf8'), public_key)
-    with open(filename, 'w') as file:
-        file.write(encrypted_privs.decode('utf8'))
+def save_private_keys(batch_privs, public_key, filename, encrypt):
+    if(encrypt):
+        encrypted_privs = encrypt_message(batch_privs.encode('utf8'), public_key)
+        with open(filename, 'w') as file:
+            file.write(encrypted_privs.decode('utf8'))
+    else:
+        with open(filename.replace('_encrypted','_unencrypted'), 'w') as file:
+            file.write(batch_privs)
+
+
+
+class QRCodeWidget(QWidget, PrintError):
+
+    def __init__(self, data = None, fixedSize=False):
+        QWidget.__init__(self)
+        self.data = None
+        self.qr = None
+        self.fixedSize = fixedSize
+        self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        if fixedSize:
+            self.setFixedSize(fixedSize, fixedSize)
+            self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.setData(data)
+
+
+    def setData(self, data):
+        if self.data != data:
+            self.data = data
+        if self.data:
+            try:
+                self.qr = qrcode.QRCode()
+                self.qr.add_data(self.data)
+                if not self.fixedSize:
+                    k = len(self.qr.get_matrix())
+                    self.setMinimumSize(k*5,k*5)
+                    self.updateGeometry()
+            except qrcode.exceptions.DataOverflowError:
+                self._bad_data(data)  # sets self.qr = None
+        else:
+            self.qr = None
+
+        self.update()
+
+
+    def _paint_blank(self):
+        qp = QPainter(self)
+        r = qp.viewport()
+        qp.fillRect(0, 0, r.width(), r.height(), self._white_brush)
+        qp.end(); del qp
+
+    def _bad_data(self, data):
+        self.print_error("Failed to generate QR image -- data too long! Data length was: {} bytes".format(len(data or '')))
+        self.qr = None
+
+    _black_brush = QBrush(QColor(0, 0, 0, 255))
+    _white_brush = QBrush(QColor(255, 255, 255, 255))
+    _black_pen = QPen(_black_brush, 1.0, join = Qt.MiterJoin)
+    _white_pen = QPen(_white_brush, 1.0, join = Qt.MiterJoin)
+
+    def paintEvent(self, e):
+        matrix = None
+
+        if self.data and self.qr:
+            try:
+                matrix = self.qr.get_matrix()
+            except qrcode.exceptions.DataOverflowError:
+                self._bad_data(self.data)  # sets self.qr = None
+
+        if not matrix:
+            self._paint_blank()
+            return
+
+        k = len(matrix)
+        qp = QPainter(self)
+        r = qp.viewport()
+
+        margin = 10
+        framesize = min(r.width(), r.height())
+        boxsize = int( (framesize - 2*margin)/k )
+        size = k*boxsize
+        left = (r.width() - size)/2
+        top = (r.height() - size)/2
+
+        # Make a white margin around the QR in case of dark theme use
+        qp.setBrush(self._white_brush)
+        qp.setPen(self._white_pen)
+        #qp.drawRect(left-margin, top-margin, size+(margin*2), size+(margin*2))
+        qp.setBrush(self._black_brush)
+        qp.setPen(self._black_pen)
+
+        for r in range(k):
+            for c in range(k):
+                if matrix[r][c]:
+                    qp.drawRect(left+c*boxsize, top+r*boxsize, boxsize - 1, boxsize - 1)
+        qp.end(); del qp

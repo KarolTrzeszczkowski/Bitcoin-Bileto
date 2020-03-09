@@ -5,9 +5,9 @@ from PyQt5.QtWidgets import *
 from electroncash.i18n import _
 from electroncash.address import Address
 from electroncash_gui.qt.transaction_dialog import show_transaction
-from electroncash.wallet import sweep
+from electroncash.wallet import sweep, ImportedPrivkeyWallet
+from electroncash.storage import WalletStorage
 from electroncash_gui.qt.util import *
-from electroncash.transaction import Transaction, TYPE_ADDRESS
 from electroncash.util import PrintError, print_error, age, Weak, InvalidPassword, NotEnoughFunds
 import random,  tempfile, string, os, queue
 from electroncash.bitcoin import encrypt_message, deserialize_privkey, public_key_from_private_key
@@ -211,7 +211,7 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
         self.wallet = parent.wallet
         self.wallet_name = wallet_name
         self.plugin = plugin
-
+        self.imported_wallets = dict()
         self.batches = dict()
         self.addresses = dict()
         self.file_paths = dict()
@@ -250,6 +250,9 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
                 file_content = f.read()
                 batch = self.decrypt(file_content)
                 self.batches[batch[0]] = batch[1:] #the first element is batch label
+                storage = WalletStorage(None,in_memory_only=True)
+                #text = str.join(batch[1:])
+                #self.imported_wallets[batch[0]](ImportedPrivkeyWallet.from_text(storage, text))
                 self.addresses[batch[0]] = self.generate_addresses(batch[1:])
                 self.file_paths[batch[0]] = file_name
             self.tu.synch_event.set()
@@ -269,7 +272,7 @@ class BiletojTab(MessageBoxMixin, PrintError, QWidget):
                 pass
             else:
                 return decrypted.strip().split('\n')
-
+        return f.strip().split('\n')
 
     def generate_addresses(self, batch):
         addresses = []
