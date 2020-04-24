@@ -71,11 +71,9 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         self.settings_updated_signal.connect(self.on_settings_updated)
         hbox.addWidget(b)
         data = "prywatny klucz do portfela"
-        self.qrw = QRCodeWidget(data)
-        qrw_layout = QVBoxLayout(self.qrw)
-        qrw_layout.addStretch(1)
-        self.number_label=QLabel("LOL")
-        qrw_layout.addWidget(self.number_label)
+        self.qrw_priv = QRCodeWidget(data)
+        self.qrw_add = QRCodeWidget(data)
+
         self.batch_label_wid = QLineEdit()
         self.batch_label_wid.setPlaceholderText(_("Bitcoin biletoj batch label"))
         self.batch_label_wid.textEdited.connect(self.batch_info_changed)
@@ -176,22 +174,25 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
             os.mkdir(os.path.join(self.working_directory,self.batch_label+"_qrcodes"))
         for i in range(self.number):
             add = self.recipient_wallet.create_new_address()
-            data = self.recipient_wallet.export_private_key(add, None)
-            batch_privs += data + '\n'
-            self.number_label.setText('  '+ str(i+1))
+            privkey = self.recipient_wallet.export_private_key(add, None)
+            batch_privs += privkey + '\n'
             if not self.only_qrcodes_checkbox.isChecked():
-                self.qrw.setData(data)
-                self.save_qrcode(self.qrw, "priv_key.png")
-                self.qrw.setData(add.to_ui_string())
-                self.save_qrcode(self.qrw, "address.png")
+                self.qrw_priv.number_label.setText('  '+ str(i+1))
+                self.qrw_priv.setData(privkey)
+                self.save_qrcode(self.qrw_priv, "priv_key.png")
+                self.qrw_add.number_label.setText('  '+ str(i+1))
+                self.qrw_add.setData("bitcoincash:" + add.to_ui_string())
+                self.save_qrcode(self.qrw_add, "address.png")
                 call([path_to_latex, self.template_file], cwd=os.path.dirname(self.template_file), shell=False)
                 call(["mv", self.template_file[:-4] + '.pdf', "tmp.pdf"],
                      cwd=os.path.dirname(self.template_file), shell=False)
             else:
-                self.qrw.setData(data)
-                self.save_qrcode(self.qrw, self.batch_label+"_qrcodes/priv_key_"+str(i+1)+".png")
-                self.qrw.setData(add.to_ui_string())
-                self.save_qrcode(self.qrw,self.batch_label+"_qrcodes/address_"+str(i+1)+".png")
+                self.qrw_priv.number_label.setText('  '+ str(i+1))
+                self.qrw_priv.setData(privkey)
+                self.save_qrcode(self.qrw_priv, self.batch_label + "_qrcodes/priv_key_" + str(i + 1) + ".png")
+                self.qrw_add.number_label.setText('  '+ str(i+1))
+                self.qrw_priv.setData("bitcoincash:" + add.to_ui_string())
+                self.save_qrcode(self.qrw_add, self.batch_label + "_qrcodes/address_" + str(i + 1) + ".png")
             self.prog_bar.setValue(i+1)
         if not self.only_qrcodes_checkbox.isChecked():
             call(["mv", "tmp.pdf", os.path.join(self.working_directory,self.batch_label + '_biletoj' + '.pdf')],
@@ -240,11 +241,16 @@ class QRCodeWidget(QWidget, PrintError):
         self.data = None
         self.qr = None
         self.fixedSize = fixedSize
+
         self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
         if fixedSize:
             self.setFixedSize(fixedSize, fixedSize)
             self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setData(data)
+        self.number_label = QLabel("LOL")
+        qrw_layout = QVBoxLayout(self)
+        qrw_layout.addStretch(1)
+        qrw_layout.addWidget(self.number_label)
 
 
     def setData(self, data):
@@ -256,7 +262,7 @@ class QRCodeWidget(QWidget, PrintError):
                 self.qr.add_data(self.data)
                 if not self.fixedSize:
                     k = len(self.qr.get_matrix())
-                    self.setMinimumSize(k*5,k*5)
+                    self.setMinimumSize(k*8,k*8)
                     self.updateGeometry()
             except qrcode.exceptions.DataOverflowError:
                 self._bad_data(data)  # sets self.qr = None
@@ -298,9 +304,9 @@ class QRCodeWidget(QWidget, PrintError):
         qp = QPainter(self)
         r = qp.viewport()
 
-        margin = 10
+        margin = 30
         framesize = min(r.width(), r.height())
-        boxsize = int( (framesize - 2*margin)/k )
+        boxsize = int( (framesize-2*margin)/k )
         size = k*boxsize
         left = (r.width() - size)/2
         top = (r.height() - size)/2
@@ -308,7 +314,7 @@ class QRCodeWidget(QWidget, PrintError):
         # Make a white margin around the QR in case of dark theme use
         qp.setBrush(self._white_brush)
         qp.setPen(self._white_pen)
-        #qp.drawRect(left-margin, top-margin, size+(margin*2), size+(margin*2))
+        qp.drawRect(left-margin, top-margin, size+2*margin, size+2*margin)
         qp.setBrush(self._black_brush)
         qp.setPen(self._black_pen)
 

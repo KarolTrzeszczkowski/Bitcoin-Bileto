@@ -155,20 +155,23 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
 
     def on_update(self):
         root = self.invisibleRootItem()
+        sels = self.selectedItems()
+        batches_to_re_select = {item.data(0, Qt.UserRole) for item in sels}
+        addresses_to_re_select = [item.data(1, Qt.UserRole) for item in sels]
+
+        items_to_re_select = []
         def remember_expanded(root):
             expanded = set()
             for j in range(0,root.childCount()):
                 it = root.child(j)
                 if it.isExpanded():
                     expanded.add(it.data(0,Qt.UserRole))
-            print("expanded: ",expanded)
             return expanded
         def restore_expanded(root, expanded_item_labels):
             for j in range(0, root.childCount()):
                 it = root.child(j)
                 if it.data(0,Qt.UserRole) in expanded_item_labels:
                     it.setExpanded(True)
-                    print("restored")
 
         expanded_item_labels = remember_expanded(root)
         self.clear()
@@ -185,7 +188,8 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
             item.setData(1, Qt.UserRole, batch_addr)
             item.setData(2,Qt.UserRole,batches[label])
             self.addChild(item)
-            print(item.isExpanded())
+            if label in batches_to_re_select:
+                items_to_re_select.append(item)
             for i, a in enumerate(batch_addr):
                 try:
                     b = self.main_window.format_amount(self.balances[a])
@@ -196,7 +200,11 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
                 addr_item.setData(1,Qt.UserRole, a)
                 addr_item.setData(2,Qt.UserRole,batches[label][i])
                 item.addChild(addr_item)
+                if a in addresses_to_re_select:
+                    items_to_re_select.append(addr_item)
         restore_expanded(root,expanded_item_labels)
+        for it in items_to_re_select:
+            it.setSelected(True)
 
 
 class BiletojTab(MessageBoxMixin, PrintError, QWidget):
