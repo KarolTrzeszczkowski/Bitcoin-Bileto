@@ -10,6 +10,8 @@ from electroncash.transaction import Transaction, TYPE_ADDRESS
 from electroncash_gui.qt.transaction_dialog import show_transaction
 from electroncash_gui.qt.amountedit  import BTCAmountEdit
 from math import floor, ceil, sqrt
+from random import shuffle
+from copy import copy
 
 
 
@@ -113,16 +115,20 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         return sqrt(sum(dev)/(len(data)-1))
 
     def make_outputs(self):
+        addr=copy(self.addresses)
+        shuffle(addr)
+        print("addr:", addr)
+        print("self.addresses:", self.addresses)
         if self.selected_distribution == 0:
-            outputs = self.regular(self.addresses)
+            outputs = self.regular(addr)
         if self.selected_distribution == 1:
-            outputs = self.tf(self.addresses)
+            outputs = self.tf(addr)
         if self.selected_distribution == 2:
-            outputs = self.tf100(self.addresses)
+            outputs = self.tf100(addr, 100)
         if self.selected_distribution == 3:
-            outputs = self.tf1000(self.addresses)
+            outputs = self.tf100(addr, 1000)
         if self.selected_distribution == 4:
-            outputs = self.tfN(self.addresses)
+            outputs = self.tfN(addr)
         return outputs
 
     def do_fund(self):
@@ -178,9 +184,9 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         return outputs
 
 
-    def tf100(self, addresses):
+    def tf100(self, addresses, n):
         outputs = []
-        if len(addresses)!= 100:
+        if len(addresses)!= n :
             raise ValueError()
         percentage_amount = [1/3., 1/3., 1/3.]
         percentage_biletoj = [0.01, 0.1, 0.89 ]
@@ -200,27 +206,6 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
             return None
         return outputs
 
-    def tf1000(self, addresses):
-        outputs = []
-        if len(addresses)!= 1000:
-            raise ValueError()
-        percentage_amount = [1/3., 1/3., 1/3.]
-        percentage_biletoj = [0.001, 0.1, 0.899 ]
-        totals = [(amt*self.total_amount)//ceil(bil*len(addresses)) for bil,amt in zip(percentage_biletoj,percentage_amount)]
-        done=0
-        self.values = []
-        for i, j in zip(percentage_amount,percentage_biletoj):
-            group_length=len(addresses)*j
-            agroup = done + int(floor(group_length))
-            for a in addresses[done:agroup]:
-                am = int((self.total_amount * i)//ceil(group_length))
-                outputs.append((TYPE_ADDRESS, a, am))
-                self.values.append(am)
-            done=agroup
-        assert sum(totals) <= self.total_amount
-        if min(self.values) <= 1100:
-            return None
-        return outputs
 
     def tfN(self, addresses):
         outputs = []

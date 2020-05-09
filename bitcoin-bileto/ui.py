@@ -94,9 +94,9 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         selected = self.selectedItems()
         tab = self.tab()
         f = lambda: tab.plugin.open_fund_dialog(tab.wallet_name, tab)
-        menu.addAction(_("Fund"), f)
+        menu.addAction("Fund("+str(len(selected))+")", f)
         menu.addAction(_("Sweep"), lambda:self.do_sweep(selected))
-        menu.addAction(_("Export selected ("+str(len(selected))+")"), lambda:self.export(selected))
+        #menu.addAction(_("Export selected ("+str(len(selected))+")"), lambda:self.export(selected))
         menu.exec_(self.viewport().mapToGlobal(position))
         pass
 
