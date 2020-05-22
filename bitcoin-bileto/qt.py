@@ -49,6 +49,9 @@ class Plugin(BasePlugin):
         """
         for window in list(self.wallet_windows.values()):
             self.close_wallet(window.wallet)
+    def icon(self):
+        from .resources import qInitResources
+        return QIcon(":bitcoin-bileto/resources/icon.png")
 
     @hook
     def update_contact(self, address, new_entry, old_entry):
@@ -95,14 +98,7 @@ class Plugin(BasePlugin):
     def has_settings_dialog(self):
         return True
 
-    @staticmethod
-    def _get_icon() -> QtGui.QIcon:
-        if QtCore.QFile.exists(":icons/status_lagging.png"):
-            icon = QtGui.QIcon(":icons/status_lagging.png")
-        else:
-            # png not found, must be new EC; try new EC icon -- svg
-            icon = QtGui.QIcon(":icons/status_lagging.svg")
-        return icon
+
 
     def add_ui_for_wallet(self, wallet_name, window):
         from .ui import BiletojTab
@@ -111,7 +107,7 @@ class Plugin(BasePlugin):
         self.lw_tabs[wallet_name] = tab
         self.lw_tab[wallet_name] = l
 
-        window.tabs.addTab(tab, self._get_icon(), _('Bitcoin Bileto'))
+        window.tabs.addTab(tab, self.icon(), _('Bitcoin Bileto'))
 
     def remove_ui_for_wallet(self, wallet_name, window):
         self.print_error("starting removing UI")
@@ -152,7 +148,7 @@ class Plugin(BasePlugin):
 
             self.lw_tabs[wallet_name] = tab
             self.lw_tab[wallet_name] = l
-            window.tabs.addTab(tab, self._get_icon(), _('Bitcoin Bileto'))
+            window.tabs.addTab(tab, self.icon(), _('Bitcoin Bileto'))
             if old_tab:
                 window.tabs.removeTab(i)
                 old_tab.searchable_list.deleteLater()
