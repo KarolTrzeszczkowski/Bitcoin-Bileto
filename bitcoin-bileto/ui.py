@@ -195,7 +195,7 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
                     b = self.main_window.format_amount(self.balances[a])
                 except KeyError:
                     b = "Synchronizing..."
-                addr_item = QTreeWidgetItem([str(a.index()+1) + a.to_ui_string(),str(b)])
+                addr_item = QTreeWidgetItem([str(i+1)+ '. ' + a.to_ui_string(),str(b)])
                 addr_item.setData(0,Qt.UserRole,label)
                 addr_item.setData(1,Qt.UserRole, a)
                 addr_item.setData(2,Qt.UserRole,batches[label][i])
