@@ -158,7 +158,14 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         if preview:
             show_transaction(tx, self.main_window, "Fund biletoj", prompt_if_unsaved=False)
         else:
-            self.main_window.network.broadcast_transaction2(tx)
+            try:
+                self.main_window.network.broadcast_transaction2(tx)
+                self.main_window.show_message("Done.")
+            except Exception:
+                self.main_window.show_message("Error. Transaction failed to broadcast.")
+
+
+
 
 
 
