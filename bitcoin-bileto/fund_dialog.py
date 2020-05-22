@@ -70,10 +70,17 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
             self.addresses = [s.data(1, Qt.UserRole) for s in selected]
         else:
             self.addresses = selected[0].data(1, Qt.UserRole)
+
+        self.p = QPushButton(_("Preview"))
+        self.p.clicked.connect(lambda : self.do_fund(preview=True))
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.p)
         self.b = QPushButton(_("Fund"))
         self.b.clicked.connect(self.do_fund)
-        vbox.addWidget(self.b)
+        hbox.addWidget(self.b)
+        vbox.addLayout(hbox)
         self.b.setDisabled(True)
+        self.p.setDisabled(True)
         vbox.addStretch(1)
 
     def on_distribution(self):
@@ -88,11 +95,14 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         except ValueError:
             self.show_message("Not enough biletoj to use this distribution")
             self.b.setDisabled(True)
+            self.p.setDisabled(True)
         except Exception as e:
             self.b.setDisabled(True)
+            self.p.setDisabled(True)
             pass
         else:
             self.b.setDisabled(False)
+            self.p.setDisabled(False)
 
     def update_stats(self):
         stats = [0]*5
@@ -101,7 +111,6 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         stats[2] = max(self.values)
         stats[3] = min(self.values)
         stats[4] = sum(self.values)
-        for s in stats: print(str(s))
         for i,s in enumerate(stats): self.stats[i].setText(str(self.main_window.format_amount(s)))
 
     def mean(self, data):
@@ -117,8 +126,6 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
     def make_outputs(self):
         addr=copy(self.addresses)
         shuffle(addr)
-        print("addr:", addr)
-        print("self.addresses:", self.addresses)
         if self.selected_distribution == 0:
             outputs = self.regular(addr)
         if self.selected_distribution == 1:
@@ -131,8 +138,7 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
             outputs = self.tfN(addr)
         return outputs
 
-    def do_fund(self):
-        print("funding")
+    def do_fund(self, preview = False):
         outputs = self.make_outputs()
         if outputs == []:
             return
@@ -149,7 +155,12 @@ class FundDialog(QDialog,MessageBoxMixin, PrintError):
         except Exception as e:
             return self.show_critical(repr(e))
         #self.main_window.show_message("Click \'broadcast\' to fund biletoj.")
-        show_transaction(tx, self.main_window, "Fund biletoj", prompt_if_unsaved=True)
+        if preview:
+            show_transaction(tx, self.main_window, "Fund biletoj", prompt_if_unsaved=False)
+        else:
+            self.main_window.network.broadcast_transaction2(tx)
+
+
 
     def regular(self, addresses):
         outputs = []

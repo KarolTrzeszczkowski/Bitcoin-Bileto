@@ -11,7 +11,7 @@ from electroncash_gui.qt.util import *
 from electroncash.util import PrintError, print_error, age, Weak, InvalidPassword
 import random, tempfile, string, os, threading, queue, qrcode
 from electroncash.bitcoin import encrypt_message, deserialize_privkey, public_key_from_private_key
-
+from .scripts import script_dict
 
 
 
@@ -100,12 +100,12 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         self.encrypt_checkbox = QCheckBox("Encrypt Batch.")
         vbox.addWidget(self.encrypt_checkbox)
         vbox.addWidget(self.only_qrcodes_checkbox)
-        b = QPushButton(_("Load .tex template"))
-        b.clicked.connect(self.load_template)
-        b.setMaximumWidth(130)
-        grid.addWidget(b, 0, 0)
-        self.template_path_label_wid = QLabel('set path')
-        grid.addWidget(self.template_path_label_wid, 0, 1)
+        #b = QPushButton(_("Load .tex template"))
+        #b.clicked.connect(self.load_template)
+        #b.setMaximumWidth(130)
+        #grid.addWidget(b, 0, 0)
+        #self.template_path_label_wid = QLabel('set path')
+        #grid.addWidget(self.template_path_label_wid, 0, 1)
         self.public_key_wid = QLineEdit()
         self.public_key_wid.setPlaceholderText(_("Public Key") + _(" for encryption"))
         self.public_key_wid.textEdited.connect(self.batch_info_changed)
@@ -124,10 +124,8 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         self.wd_label.setText(self.working_directory)
 
     def save_qrcode(self, qrw, name):
-        print_error("saving...")
         p = qrw and qrw.grab()
         filename = os.path.join(self.working_directory, name)
-        print_error("filename ")
         if p and not p.isNull():
             if filename:
                 print_error("saving")
@@ -143,8 +141,8 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
             # self.public_key = str(self.public_key_wid.text())
             self.public_key = self.wallet.get_pubkey(False,0)
             assert os.path.exists(self.working_directory)
-            if not self.only_qrcodes_checkbox.isChecked():
-                assert os.path.isfile(self.template_file)
+            #if not self.only_qrcodes_checkbox.isChecked():
+                #assert os.path.isfile(self.template_file)
         except AssertionError:
             self.times_wid.setText("1")
             self.b.setDisabled(True)
@@ -170,33 +168,24 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
         except:
             path_to_latex = '/Library/Tex/texbin/pdflatex'
         batch_privs = self.batch_label + '\n'
-        if self.only_qrcodes_checkbox.isChecked():
-            os.mkdir(os.path.join(self.working_directory,self.batch_label+"_qrcodes"))
+        os.mkdir(os.path.join(self.working_directory,self.batch_label+"_qrcodes"))
         for i in range(self.number):
             add = self.recipient_wallet.create_new_address()
             privkey = self.recipient_wallet.export_private_key(add, None)
             batch_privs += privkey + '\n'
-            if not self.only_qrcodes_checkbox.isChecked():
-                self.qrw_priv.number_label.setText('  '+ str(i+1))
-                self.qrw_priv.setData(privkey)
-                self.save_qrcode(self.qrw_priv, "priv_key.png")
-                self.qrw_add.number_label.setText('  '+ str(i+1))
-                self.qrw_add.setData("bitcoincash:" + add.to_ui_string())
-                self.save_qrcode(self.qrw_add, "address.png")
-                call([path_to_latex, self.template_file], cwd=os.path.dirname(self.template_file), shell=False)
-                call(["mv", self.template_file[:-4] + '.pdf', "tmp.pdf"],
-                     cwd=os.path.dirname(self.template_file), shell=False)
-            else:
-                self.qrw_priv.number_label.setText('  '+ str(i+1))
-                self.qrw_priv.setData(privkey)
-                self.save_qrcode(self.qrw_priv, self.batch_label + "_qrcodes/priv_key_" + str(i + 1) + ".png")
-                self.qrw_add.number_label.setText('  '+ str(i+1))
-                self.qrw_priv.setData("bitcoincash:" + add.to_ui_string())
-                self.save_qrcode(self.qrw_add, self.batch_label + "_qrcodes/address_" + str(i + 1) + ".png")
+            self.qrw_priv.number_label.setText('  '+ str(i+1))
+            self.qrw_priv.setData(privkey)
+            self.save_qrcode(self.qrw_priv, self.batch_label + "_qrcodes/priv_key_" + str(i + 1) + ".png")
+            self.qrw_add.number_label.setText('  '+ str(i+1))
+            self.qrw_priv.setData("bitcoincash:" + add.to_ui_string())
+            self.save_qrcode(self.qrw_add, self.batch_label + "_qrcodes/address_" + str(i + 1) + ".png")
             self.prog_bar.setValue(i+1)
         if not self.only_qrcodes_checkbox.isChecked():
-            call(["mv", "tmp.pdf", os.path.join(self.working_directory,self.batch_label + '_biletoj' + '.pdf')],
-                cwd=os.path.dirname(self.template_file), shell=False)
+            self.scripts()
+            call(['chmod', 'u+x', "compile.sh"],
+                 cwd=self.working_directory, shell=False)
+            call(["./compile.sh", '-l', self.batch_label, '-n', str(self.number)],
+                cwd=self.working_directory, shell=False)
         filename = os.path.join(self.working_directory,
                                 self.batch_label + '_encrypted_private_keys')
 
@@ -209,15 +198,23 @@ class NewBatchDialog(QDialog,MessageBoxMixin, PrintError):
     def filter(self, *args):
         ''' This is here because searchable_list must define a filter method '''
 
+    def scripts(self):
+        for name, scr in script_dict.items():
+            path = os.path.join(self.working_directory,name)
+            if not os.path.isfile(path):
+                with open(path, 'w') as file:
+                    file.write(scr)
+
+
     @staticmethod
     def delete_temp_wallet_file(file):
         ''' deletes the wallet file '''
         if file and os.path.exists(file):
             try:
                 os.remove(file)
-                print_error("[InterWalletTransfer] Removed temp file", file)
+                print_error("[BitcoinBileto] Removed temp file", file)
             except Exception as e:
-                print_error("[InterWalletTransfer] Failed to remove temp file", file, "error: ", repr(e))
+                print_error("[BitcoinBileto] Failed to remove temp file", file, "error: ", repr(e))
 
     def closeEvent(self, event):
         #self.plugin.on_create_dialog_closed(self.wallet_name)

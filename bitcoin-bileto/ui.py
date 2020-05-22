@@ -43,11 +43,13 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         self.sending = None
         self.update_sig.connect(self.update)
         self.monospace_font = QFont(MONOSPACE_FONT)
+
         self.italic_font = QFont(); self.italic_font.setItalic(True)
         self.loaded_icon= self._get_loaded_icon()
         self.collected_icon = self._get_collected_icon()
         self.wallet = tab.wallet
         self.balances = dict()
+        self.balances_batch = dict()
         self.synch_event = threading.Event()
         lock = threading.Lock()
         self.synch = threading.Thread(target=self.synchronize, daemon=True, args=(self.synch_event,lock,))
@@ -59,9 +61,12 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
             e.wait()
             with lock:
                 items = tab.addresses.items()
-            for i, addrs in items:
+            for label , addrs in items:
+                self.balances_batch[label] = []
                 for a in addrs:
-                    self.balances[a] = self.address_balance(a)
+                    b = self.address_balance(a)
+                    self.balances[a] = b
+                    self.balances_batch[label].append(b)
                     self.update_sig.emit()
 
 
@@ -181,7 +186,11 @@ class BiletojList(MessageBoxMixin, PrintError, MyTreeWidget):
         if not tab :
             return
         for label, batch_addr in addresses.items():
-            item = QTreeWidgetItem([label, ''])
+            try:
+                b = self.main_window.format_amount(sum(self.balances_batch[label]))
+            except KeyError:
+                b = "Synchronizing..."
+            item = QTreeWidgetItem([label, b])
             item.setFont(0, self.monospace_font)
             item.setTextAlignment(0, Qt.AlignLeft)
             item.setData(0,Qt.UserRole,label)
